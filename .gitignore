@@ -128,3 +128,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Diagrams
+/diagrams
+harvest_notes.txt
+
+# svc accounts
+svc_account*
+*svc_account*
