@@ -311,8 +311,8 @@ class HarvestAnalytics:
             task_id = self.harvest_tasks[entry["task"].upper()]
             hours = entry["hours"]
             spent_date = self.to_spent_date(entry["date"].upper())
-            print(user_id, project_id, task_id, spent_date, hours)
-            # self.create_time_entry(user_id, project_id, task_id, spent_date, hours)
+            # print(user_id, project_id, task_id, spent_date, hours)
+            self.create_time_entry(user_id, project_id, task_id, spent_date, hours)
 
     @staticmethod
     def to_spent_date(week_day):
@@ -326,7 +326,7 @@ class HarvestAnalytics:
             "SUNDAY": 7
         }
         offset = datetime.today().isoweekday() - iso_week_days[week_day]
-        spent_date = (datetime.today() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        spent_date = (datetime.today() - timedelta(days=offset) + timedelta(days=7)).strftime('%Y-%m-%d')
         return spent_date
 
 
@@ -606,10 +606,10 @@ def log_update(payload, sheet_id):
 def main(event, context):
     logging.info(f'Payload input data is {event} and context {context}')
     harvest_runner = HarvestAnalytics(PAST_ENTRIES_LOOKUP, HARVEST_ACCOUNT_ID, HARVEST_TOKEN)
-    # harvest_runner.create_weekly_entries()
-    # harvest_entries = harvest_runner.get_historical_data()
-    # new_rows = get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
-    # updated_cells = gsheet_append(CREDENTIALS_FILE, SPREADSHEET_ID, ENTRIES_SHEET, new_rows)
+    harvest_runner.create_weekly_entries()
+    harvest_entries = harvest_runner.get_historical_data()
+    new_rows = get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
+    updated_cells = gsheet_append(CREDENTIALS_FILE, SPREADSHEET_ID, ENTRIES_SHEET, new_rows)
     # log_update(updated_cells, ENTRIES_SHEET)
     projects_status = harvest_runner.get_project_rows()
     projects_range = f'{PROJECTS_SHEET}!A2:M'

@@ -7,6 +7,7 @@ import urllib3
 from datetime import datetime, timedelta, date
 import os
 
+
 logging.info('Loading ENV vars')
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
@@ -300,7 +301,7 @@ class HarvestAnalytics:
             "SUNDAY": 7
         }
         offset = datetime.today().isoweekday() - iso_week_days[week_day]
-        spent_date = (datetime.today() - timedelta(days=offset)).strftime('%Y-%m-%d')
+        spent_date = (datetime.today() - timedelta(days=offset) + timedelta(days=7)).strftime('%Y-%m-%d')
         return spent_date
 
 
