@@ -1,9 +1,10 @@
 import logging
 import urllib3
+import os
 from dotenv import load_dotenv
-from .harvest.harvest_wrapper import HarvestAnalytics
-from .float.float_wrapper import FloatAnalytics
-from .gsheet.gsheet_wrapper import get_missing_rows, gsheet_append, gsheet_update, log_update
+from harvest.harvest_wrapper import HarvestAnalytics
+from float.float_wrapper import FloatAnalytics
+from gsheet.gsheet_wrapper import GoogleRunner
 # from .myforecast.forecast_wrapper import ForecastAnalytics
 
 
@@ -28,15 +29,20 @@ FLOAT_TOKEN = os.environ["FLOAT_TOKEN"]
 
 def main(event, context):
     logging.info(f'Payload input data is {event} and context {context}')
-    harvest_runner = HarvestAnalytics(PAST_ENTRIES_LOOKUP, HARVEST_ACCOUNT_ID, HARVEST_TOKEN)
+    google_runner = GoogleRunner(SPREADSHEET_ID, CREDENTIALS_FILE, ENTRIES_SHEET, TEST_SHEET, LOGS_SHEET,
+                                 ROLES_SHEET, WEEKLY_TASKS_SHEET, PROJECTS_SHEET)
+    weekly_entries = google_runner.get_weekly_entries()
+    eligible_roles = google_runner.get_eligible_roles()
+    harvest_runner = HarvestAnalytics(PAST_ENTRIES_LOOKUP, HARVEST_ACCOUNT_ID, HARVEST_TOKEN,
+                                      weekly_entries, eligible_roles)
     # harvest_runner.create_weekly_entries()
     harvest_entries = harvest_runner.get_historical_data()
-    new_rows = get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
-    # updated_cells = gsheet_append(CREDENTIALS_FILE, SPREADSHEET_ID, ENTRIES_SHEET, new_rows)
+    new_rows = google_runner.get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
+    # updated_cells = gsheet_append(ENTRIES_SHEET, new_rows)
     # log_update(updated_cells, ENTRIES_SHEET, "entries")
     # projects_status = harvest_runner.get_project_rows()
     # projects_range = f'{PROJECTS_SHEET}!A2:M'
-    # updated_cells = gsheet_update(CREDENTIALS_FILE, SPREADSHEET_ID, projects_range, projects_status)
+    # updated_cells = gsheet_update(projects_range, projects_status)
     # log_update(updated_cells, PROJECTS_SHEET, "projects")
     harvest_users = harvest_runner.harvest_users
     harvest_projects = harvest_runner.harvest_projects
@@ -46,8 +52,8 @@ def main(event, context):
     float_runner.create_tasks_from_ghseet(new_rows)
     # forecast_runner = ForecastAnalytics(FORECAST_ACCOUNT_ID, FORECAST_TOKEN)
     # forecast_assignments = forecast_runner.get_forecast_assignments()
-    # updated_cells = gsheet_append(CREDENTIALS_FILE, SPREADSHEET_ID, FORECAST_SHEET, forecast_assignments)
-    # log_update(updated_cells, FORECAST_SHEET)
+    # updated_cells = gsheet_append(FORECAST_SHEET, forecast_assignments)
+    # log_update(updated_cells, FORECAST_SHEET, "entries")
 
 
 if __name__ == "__main__":

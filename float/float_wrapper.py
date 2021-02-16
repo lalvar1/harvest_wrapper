@@ -1,4 +1,3 @@
-import unidecode
 from time import sleep
 import requests
 import unidecode
@@ -16,7 +15,7 @@ class FloatAnalytics:
         self.float_projects = self.get_projects()
         self.float_users = self.get_people()
         # self.float_tasks = self.get_tasks()
-        self.harvest_users = users
+        self.harvest_users = {unidecode.unidecode(user): data for user, data in users.items()}
         self.harvest_projects = projects
         self.harvest_clients = clients
         self.harvest_tasks = tasks
@@ -206,7 +205,7 @@ class FloatAnalytics:
                 if row[1][:4] == '2021':
                     body = {
                         "project_id": self.get_project_id(row[6].upper(), row[7]),
-                        "people_id": self.float_users[unidecode.unidecode(row[2])]['id'],
+                        "people_id": self.float_users[row[2]]['id'],
                         "hours": round(float(row[11]) * 4) / 4 if float(row[11]) >= 0.25 else 0.25,
                     }
                     if scheduled:
@@ -306,7 +305,8 @@ class FloatAnalytics:
                         body["active"] = is_active
                         # print('active', id, harvest_id, project_data["name"], project_data["is_active"], is_active)
                     if body:
-                        self.update_data('projects', id, body)
+                        print('projects', id, body)
+                        # self.update_data('projects', id, body)
                     else:
                         continue
                 else:
@@ -328,8 +328,8 @@ class FloatAnalytics:
                     body = {
                       "default_hourly_rate": rate
                     }
-                    # print(user, rate, self.harvest_users[user]["default_hourly_rate"])
-                    self.update_data('people', user_data["id"], body)
+                    print(user, rate, self.harvest_users[user]["default_hourly_rate"])
+                    # self.update_data('people', user_data["id"], body)
         except Exception as e:
             print(f'Error while syncing Users. Error was {e}')
 

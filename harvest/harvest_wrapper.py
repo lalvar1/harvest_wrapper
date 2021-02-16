@@ -7,13 +7,13 @@ class HarvestAnalytics:
     """
     A class to process and structure Harvest data
     """
-    def __init__(self, entries_lookup, harvest_account, harvest_token):
+    def __init__(self, entries_lookup, harvest_account, harvest_token, weekly_entries, eligible_roles):
         self.past_entries_lookup = entries_lookup
         self.harvest_api = 'https://api.harvestapp.com/v2/'
         self.harvest_account = harvest_account
         self.harvest_token = harvest_token
-        self.weekly_entries = get_weekly_entries()
-        self.harvest_eligible_roles = get_eligible_roles()
+        self.weekly_entries = weekly_entries
+        self.harvest_eligible_roles = eligible_roles
         self.harvest_tasks = self.get_tasks()
         self.harvest_projects = self.get_projects()
         self.harvest_users = self.get_users_data()
@@ -64,7 +64,8 @@ class HarvestAnalytics:
                 else:
                     timezone = None
                 user_id = user['id']
-                user_info = {'role': role, 'geography': timezone, 'id': user_id}
+                hourly_rate = user['default_hourly_rate']
+                user_info = {'role': role, 'geography': timezone, 'id': user_id, 'default_hourly_rate': hourly_rate}
                 users_data.update({full_name: user_info})
             return users_data
         except Exception as e:
@@ -143,9 +144,10 @@ class HarvestAnalytics:
                 for project in projects["projects"]:
                     project_id = project["id"]
                     project_data = {
-                        "name": project["name"].upper(),
+                        "name": project["name"],
                         "code": project["code"],
                         "is_active": project["is_active"],
+                        "is_billable": project["is_billable"],
                         "client": project["client"]["name"],
                         "notes": project["notes"],
                         "start_date": project["starts_on"],
@@ -303,4 +305,31 @@ class HarvestAnalytics:
         }
         offset = datetime.today().isoweekday() - iso_week_days[week_day]
         spent_date = (datetime.today() - timedelta(days=offset) + timedelta(days=7)).strftime('%Y-%m-%d')
+        # spent_date = (datetime.today() - timedelta(days=offset)).strftime('%Y-%m-%d')
         return spent_date
+
+    def get_clients(self):
+        """
+        Get Harvest clients
+        :return: tasks list of dicts
+        """
+        url_tasks = self.harvest_api + 'clients'
+        headers = {
+            "User-Agent": "Python Harvest API Sample",
+            "Authorization": "Bearer {}".format(self.harvest_token),
+            "Harvest-Account-ID": self.harvest_account
+        }
+        try:
+            print('Getting Harvest Clients')
+            clients_hashmap = {}
+            total_pages = requests.get(url_tasks, verify=False, headers=headers).json()['total_pages']
+            for page in range(1, total_pages + 1):
+                clients = requests.get(url_tasks, verify=False, headers=headers, params={'page': page}).json()
+                for client in clients["clients"]:
+                    name = client["name"]
+                    client_id = client["id"]
+                    is_active = client["is_active"]
+                    clients_hashmap.update({name: {"id": client_id, "is_active": is_active}})
+            return clients_hashmap
+        except Exception as e:
+            print(f'Error while getting clients. Error was {e}')
