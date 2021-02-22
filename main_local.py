@@ -36,14 +36,17 @@ def main(event, context):
     harvest_runner = HarvestAnalytics(PAST_ENTRIES_LOOKUP, HARVEST_ACCOUNT_ID, HARVEST_TOKEN,
                                       weekly_entries, eligible_roles)
     # harvest_runner.create_weekly_entries()
-    harvest_entries = harvest_runner.get_historical_data()
-    new_rows = google_runner.get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
+
+    # harvest_entries = harvest_runner.get_historical_data()
+    # new_rows = google_runner.get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
+
     # updated_cells = gsheet_append(ENTRIES_SHEET, new_rows)
     # log_update(updated_cells, ENTRIES_SHEET, "entries")
     # projects_status = harvest_runner.get_project_rows()
     # projects_range = f'{PROJECTS_SHEET}!A2:M'
     # updated_cells = gsheet_update(projects_range, projects_status)
     # log_update(updated_cells, PROJECTS_SHEET, "projects")
+    # new_rows = google_runner.read_gsheet_data(ENTRIES_SHEET)
     harvest_users = harvest_runner.harvest_users
     harvest_projects = harvest_runner.harvest_projects
     float_runner = FloatAnalytics(FLOAT_TOKEN, users=harvest_users, projects=harvest_projects)

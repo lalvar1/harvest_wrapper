@@ -202,48 +202,35 @@ class FloatAnalytics:
             print(f'Creating Float {task_type} Tasks')
             count = 0
             for row in gsheet_data:
-                if row[1][:4] == '2021':
-                    body = {
-                        "project_id": self.get_project_id(row[6].upper(), row[7]),
-                        "people_id": self.float_users[row[2]]['id'],
-                        "hours": round(float(row[11]) * 4) / 4 if float(row[11]) >= 0.25 else 0.25,
-                    }
-                    if scheduled:
-                        body.update({
-                            "start_date": row[1],
-                            "end_date": row[1],
-                            "repeat_state": 0,  # no repeat
-                            "name": row[8]
-                        })
-                    else:
-                        body.update({
-                            "date": row[1],
-                            "billable": 1 if row[9].upper() == 'TRUE' else 0,
-                            "task_name": row[8]
-                        })
-                    response = requests.post(tasks_url, verify=False, headers=headers, data=body)
-                    if 'X-RateLimit-Remaining-Minute' in response.headers:
-                        rate_limit_remaining = response.headers['X-RateLimit-Remaining-Minute']
-                        if int(rate_limit_remaining) <= 15:
-                            print("Cooling down 1:30 minute")
-                            sleep(90)
+                # if row[1][:4] == '2021':
+                body = {
+                    "project_id": self.get_project_id(row[6].upper(), row[7]),
+                    "people_id": self.float_users[unidecode.unidecode(row[2])]['id'],
+                    "hours": round(float(row[11]) * 4) / 4 if float(row[11]) >= 0.25 else 0.25,
+                    "date": row[1],
+                    "billable": 1 if row[9].strip().upper() == 'TRUE' else 0,
+                    "task_name": row[8]
+                }
+                response = requests.post(tasks_url, verify=False, headers=headers, data=body)
+                print(row[9], body["billable"], response.json()[0]["billable"])
+                if 'X-RateLimit-Remaining-Minute' in response.headers:
+                    rate_limit_remaining = response.headers['X-RateLimit-Remaining-Minute']
+                    if int(rate_limit_remaining) <= 15:
+                        print("Cooling down 1:30 minutes")
+                        sleep(90)
                     else:
                         sleep(0.8)  # 800ms pause to avoid API Throttle
-                    count += 1
-                    if response.status_code == 200:
-                        print(count, response.status_code, response.json())
-                    else:
-                        print(count, response.status_code, row)
+                count += 1
+                if response.status_code == 200:
+                    print(count, response.status_code, response.json())
+                else:
+                    print(count, response.status_code, row)
 
             print(f" {count} Tasks were successfully created")
         except Exception as e:
             print(f'Error while creating tasks. Error was {e}')
 
     def create_people(self):
-        name = ""
-        email = ""
-        job_title = ""
-        tags = "location"
         pass
 
     def create_tasks(self):
@@ -292,23 +279,16 @@ class FloatAnalytics:
                     is_active = 1 if harvest_data["is_active"] else 0
                     client = harvest_data["client"]
                     body = {}
-                    # harvest_id = harvest_data["id"]
                     if project_data["client"] != self.float_clients[client]["id"]:
                         body["client_id"] = self.float_clients[client]["id"]
-                        # print('client_id', id, harvest_id, project_data["name"], project_data["client"],
-                        #      self.float_clients[client]["id"])
                     if project_data["is_billable"] != is_billable:
                         body["non_billable"] = is_billable
-                        # print('billable', id, harvest_id, project_data["name"], project_data["is_billable"],
-                        # is_billable)
                     if project_data["is_active"] != is_active:
                         body["active"] = is_active
-                        # print('active', id, harvest_id, project_data["name"], project_data["is_active"], is_active)
                     if body:
-                        print('projects', id, body)
-                        # self.update_data('projects', id, body)
-                    else:
-                        continue
+                        # print('projects', id, body)
+                        sleep(0.4)
+                        self.update_data('projects', id, body)
                 else:
                     print('Float project data not found in Harvest', id, project_data)
             print('Projects finished syncing')
@@ -323,19 +303,29 @@ class FloatAnalytics:
         try:
             print('Syncing Float Users')
             for user, user_data in self.float_users.items():
-                rate = float(user_data["default_hourly_rate"].strip('0'))
-                if rate != self.harvest_users[user]["default_hourly_rate"]:
-                    body = {
-                      "default_hourly_rate": rate
-                    }
-                    print(user, rate, self.harvest_users[user]["default_hourly_rate"])
-                    # self.update_data('people', user_data["id"], body)
+                if user not in self.harvest_users.keys():
+                    continue
+                float_rate = float(user_data["default_hourly_rate"]) if user_data["default_hourly_rate"] else float(0)
+                float_role = user_data["role"] if user_data["role"] else ""
+                if self.harvest_users[user]["default_hourly_rate"]:
+                    harvest_rate = self.harvest_users[user]["default_hourly_rate"]
+                else:
+                    harvest_rate = float(0)
+                harvest_role = self.harvest_users[user]["role"]
+                body = {}
+                if float_rate != harvest_rate:
+                    body["default_hourly_rate"] = harvest_rate
+                if float_role != harvest_role:
+                    body["job_title"] = harvest_role
+                if body:
+                    # print(user, rate, self.harvest_users[user])
+                    self.update_data('people', user_data["id"], body)
         except Exception as e:
             print(f'Error while syncing Users. Error was {e}')
 
     def update_data(self, endpoint, id, body):
         f"""
-        Update via PUT method a Float field on specified endpoint
+        Update via PATCH method a Float field on specified endpoint
         """
         url = f"{self.float_api}/{endpoint}/{id}"
         headers = {
@@ -343,7 +333,7 @@ class FloatAnalytics:
             "Authorization": f"Bearer {self.float_token}"
         }
         try:
-            response = requests.put(url, verify=False, headers=headers, data=body).json()
+            response = requests.patch(url, verify=False, headers=headers, data=body).json()
             print(f'Updated {endpoint}/{id}. Input: {body}. Response: {response}')
         except Exception as e:
             print(f'Error while updating {endpoint}/{id}: {e}')

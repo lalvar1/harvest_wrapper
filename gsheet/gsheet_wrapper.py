@@ -94,6 +94,7 @@ class GoogleRunner:
         :return: all rows if exists
         """
         try:
+            print(f'Getting data from {sheet_range}')
             service = self.google_auth()
             sheet = service.spreadsheets()
             result = sheet.values().get(spreadsheetId=self.spreadsheet_id,
