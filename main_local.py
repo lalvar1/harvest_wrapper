@@ -29,7 +29,7 @@ FLOAT_TOKEN = os.environ["FLOAT_TOKEN"]
 
 def main(event, context):
     logging.info(f'Payload input data is {event} and context {context}')
-    google_runner = GoogleRunner(SPREADSHEET_ID, CREDENTIALS_FILE, ENTRIES_SHEET, TEST_SHEET, LOGS_SHEET,
+    google_runner = GoogleRunner(SPREADSHEET_ID, CREDENTIALS_FILE, ENTRIES_SHEET, LOGS_SHEET,
                                  ROLES_SHEET, WEEKLY_TASKS_SHEET, PROJECTS_SHEET)
     weekly_entries = google_runner.get_weekly_entries()
     eligible_roles = google_runner.get_eligible_roles()
@@ -40,12 +40,12 @@ def main(event, context):
     # harvest_entries = harvest_runner.get_historical_data()
     # new_rows = google_runner.get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
 
-    # updated_cells = gsheet_append(ENTRIES_SHEET, new_rows)
-    # log_update(updated_cells, ENTRIES_SHEET, "entries")
+    # updated_cells = google_runner.gsheet_append(ENTRIES_SHEET, new_rows)
+    # google_runner.log_update(updated_cells, ENTRIES_SHEET, "entries")
     # projects_status = harvest_runner.get_project_rows()
     # projects_range = f'{PROJECTS_SHEET}!A2:M'
-    # updated_cells = gsheet_update(projects_range, projects_status)
-    # log_update(updated_cells, PROJECTS_SHEET, "projects")
+    # updated_cells = google_runner.gsheet_update(projects_range, projects_status)
+    # google_runner.log_update(updated_cells, PROJECTS_SHEET, "projects")
     # new_rows = google_runner.read_gsheet_data(ENTRIES_SHEET)
     harvest_users = harvest_runner.harvest_users
     harvest_projects = harvest_runner.harvest_projects
@@ -55,8 +55,8 @@ def main(event, context):
     float_runner.create_tasks_from_ghseet(new_rows)
     # forecast_runner = ForecastAnalytics(FORECAST_ACCOUNT_ID, FORECAST_TOKEN)
     # forecast_assignments = forecast_runner.get_forecast_assignments()
-    # updated_cells = gsheet_append(FORECAST_SHEET, forecast_assignments)
-    # log_update(updated_cells, FORECAST_SHEET, "entries")
+    # updated_cells = google_runner.gsheet_append(FORECAST_SHEET, forecast_assignments)
+    # google_runner.log_update(updated_cells, FORECAST_SHEET, "entries")
 
 
 if __name__ == "__main__":

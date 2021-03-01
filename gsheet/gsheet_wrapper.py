@@ -9,12 +9,11 @@ class GoogleRunner:
     A class to manage Google Sheets
     """
 
-    def __init__(self, spreadsheet_id, credentials_file, entries_sheet, test_sheet, logs_sheet, roles_sheet,
+    def __init__(self, spreadsheet_id, credentials_file, entries_sheet, logs_sheet, roles_sheet,
                  weekly_tasks_sheet, projects_sheet):
         self.spreadsheet_id = spreadsheet_id
         self.credentials_file = credentials_file
         self.entries_sheet = entries_sheet
-        self.test_sheet = test_sheet
         self.logs_sheet = logs_sheet
         self.roles_sheet = roles_sheet
         self.weekly_tasks_sheet = weekly_tasks_sheet
@@ -127,7 +126,7 @@ class GoogleRunner:
         Get weekly automated Harvest tasks
         :return:
         """
-        print(f'Getting Automated time-entries from Google Sheet')
+        print('Getting Automated time-entries from Google Sheet')
         weekly_entries = self.read_gsheet_data(self.weekly_tasks_sheet)
         entries = [{"user": row[0], "project": row[1], "code": row[2], "task": row[3], "date": row[4],
                     "hours": row[5]} for row in weekly_entries[1:]]
@@ -173,13 +172,13 @@ class GoogleRunner:
         """
         print('Getting Missing Rows from Google Sheet')
         new_rows = []
-        current_rows = read_gsheet_data(self.entries_sheet)
+        current_rows = self.read_gsheet_data(self.entries_sheet)
         last_period_initial_date = (datetime.today() - timedelta(days=past_entries_lookup)).strftime('%Y-%m-%d')
         last_period_rows = {}
         for index, row in enumerate(current_rows[1:]):
             if row[1] >= last_period_initial_date:
-                last_period_rows.update({row[0]: {'values': row[1:11] + [float(row[11]), int(row[12])] +
-                                                  list(map(float, row[13:])), 'index': index + 2}})
+                last_period_rows.update({row[0]: {'values': row[1:11] + [float(row[11]), int(row[12])]
+                                                  + list(map(float, row[13:])), 'index': index + 2}})
         last_period_rows_uid = [int(row) for row in last_period_rows.keys()]
         for row in input_entries:
             if row[0] not in last_period_rows_uid:

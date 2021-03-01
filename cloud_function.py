@@ -6,6 +6,7 @@ import requests
 import urllib3
 from datetime import datetime, timedelta, date
 import os
+import unidecode
 
 
 logging.info('Loading ENV vars')
@@ -20,26 +21,26 @@ PROJECTS_SHEET = os.environ["PROJECTS_SHEET"]
 HARVEST_TOKEN = os.environ["HARVEST_TOKEN"]
 HARVEST_ACCOUNT_ID = os.environ["HARVEST_ACCOUNT_ID"]
 PAST_ENTRIES_LOOKUP = int(os.environ["PAST_ENTRIES_LOOKUP"])
+FLOAT_TOKEN = os.environ["FLOAT_TOKEN"]
 
 
 class HarvestAnalytics:
     """
     A class to process and structure Harvest data
     """
-    def __init__(self, entries_lookup, harvest_account, harvest_token):
+    def __init__(self, entries_lookup, harvest_account, harvest_token, weekly_entries, eligible_roles):
         self.past_entries_lookup = entries_lookup
         self.harvest_api = 'https://api.harvestapp.com/v2/'
         self.harvest_account = harvest_account
         self.harvest_token = harvest_token
-        self.weekly_entries = get_weekly_entries()
-        self.harvest_eligible_roles = get_eligible_roles()
+        self.weekly_entries = weekly_entries
+        self.harvest_eligible_roles = eligible_roles
         self.harvest_tasks = self.get_tasks()
         self.harvest_projects = self.get_projects()
         self.harvest_users = self.get_users_data()
 
     def get_historical_data(self):
         """
-        Get Harvest formatted time-entries
         :return:
         """
         print('Getting Historical time entries from Harvest')
@@ -84,7 +85,8 @@ class HarvestAnalytics:
                 else:
                     timezone = None
                 user_id = user['id']
-                user_info = {'role': role, 'geography': timezone, 'id': user_id}
+                hourly_rate = user['default_hourly_rate']
+                user_info = {'role': role, 'geography': timezone, 'id': user_id, 'default_hourly_rate': hourly_rate}
                 users_data.update({full_name: user_info})
             return users_data
         except Exception as e:
@@ -102,6 +104,7 @@ class HarvestAnalytics:
         users_entries = []
         start_date = (datetime.today() - timedelta(days=self.past_entries_lookup)).strftime('%Y-%m-%d')
         execution_date = datetime.today().strftime('%Y-%m-%d')
+        # start_date = '2019-01-01'
         try:
             for page in range(1, total_pages + 1):
                 print(f'Getting Harvest entries from page #{page}')
@@ -162,9 +165,10 @@ class HarvestAnalytics:
                 for project in projects["projects"]:
                     project_id = project["id"]
                     project_data = {
-                        "name": project["name"].upper(),
+                        "name": project["name"],
                         "code": project["code"],
                         "is_active": project["is_active"],
+                        "is_billable": project["is_billable"],
                         "client": project["client"]["name"],
                         "notes": project["notes"],
                         "start_date": project["starts_on"],
@@ -265,7 +269,8 @@ class HarvestAnalytics:
         }
         try:
             response = requests.post(url_time_entries, verify=False, data=body, headers=headers).json()
-            print(f'Harvest time-entry created, response was: {response}')
+            # entry_id = response["id"]
+            print(f'Entry created, response was: {response}')
             return response
         except Exception as e:
             print(f'Error while creating time-entry. Error was {e}')
@@ -305,177 +310,425 @@ class HarvestAnalytics:
         return spent_date
 
 
-def google_auth(credential_file):
+class FloatAnalytics:
     """
-    oauth2 authentication agains Google Gsheet API
-    :return:
+    A class to process and structure Float data
     """
-    scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    try:
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(credential_file, scope)
-        service = build('sheets', 'v4', http=credentials.authorize(httplib2.Http()), cache_discovery=False)
-        return service
-    except Exception as e:
-        print(f"Error connecting: {e}. Retrying connection...")
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(credential_file, scope)
-        service = build('sheets', 'v4', http=credentials.authorize(httplib2.Http()), cache_discovery=False)
-        return service
+    def __init__(self, float_token, users=None, projects=None, clients=None, tasks=None):
+        self.float_token = float_token
+        self.float_api = 'https://api.float.com/v3'
+        self.float_clients = self.get_clients()
+        self.float_projects = self.get_projects()
+        self.float_users = self.get_people()
+        self.harvest_users = {unidecode.unidecode(user): data for user, data in users.items()}
+        self.harvest_projects = projects
+        self.harvest_clients = clients
+        self.harvest_tasks = tasks
+
+    def get_clients(self):
+        """
+        Get Float clients
+        :return: clients list of dicts
+        """
+        clients_url = f"{self.float_api}/clients"
+        headers = {
+            "User-Agent": "Python Float App",
+            "Authorization": f"Bearer {self.float_token}"
+        }
+        try:
+            print('Getting Float Clients')
+            clients_hashmap = {}
+            total_pages = requests.get(clients_url, verify=False, headers=headers).headers['X-Pagination-Page-Count']
+            for page in range(1, int(total_pages) + 1):
+                clients = requests.get(clients_url, verify=False, headers=headers, params={'page': page}).json()
+                for client in clients:
+                    name = client["name"]
+                    client_id = client["client_id"]
+                    clients_hashmap.update({name: {"id": client_id}})
+            return clients_hashmap
+        except Exception as e:
+            print(f'Error while getting clients. Error was {e}')
+
+    def get_projects(self):
+        """
+        Get Float projects
+        :return: projects list of dicts, by id given there aren't unique names on some cases
+        """
+        projects_url = f"{self.float_api}/projects"
+        headers = {
+            "User-Agent": "Python Float App",
+            "Authorization": f"Bearer {self.float_token}"
+        }
+        try:
+            print('Getting Float Projects')
+            projects_hashmap = {}
+            total_pages = requests.get(projects_url, verify=False, headers=headers).headers['X-Pagination-Page-Count']
+            for page in range(1, int(total_pages) + 1):
+                projects = requests.get(projects_url, verify=False, headers=headers, params={'page': page}).json()
+                for project in projects:
+                    name = project["name"].upper()
+                    project_id = project["project_id"]
+                    budget = project["budget_total"]
+                    client = project["client_id"]
+                    code = project["tags"][0] if project["tags"] else ""
+                    is_active = project["active"]
+                    is_billable = project["non_billable"]
+                    projects_hashmap.update({project_id: {"name": name, "budget": budget, "client": client,
+                                            "code": code, "is_active": is_active, "is_billable": is_billable}})
+            return projects_hashmap
+        except Exception as e:
+            print(f'Error while getting projects. Error was {e}')
+
+    def get_people(self):
+        """
+        Get Float Users
+        :return: users list of dicts
+        """
+        projects_url = f"{self.float_api}/people"
+        headers = {
+            "User-Agent": "Python Float App",
+            "Authorization": f"Bearer {self.float_token}"
+        }
+        try:
+            print('Getting Float Users')
+            user_hashmap = {}
+            total_pages = requests.get(projects_url, verify=False, headers=headers).headers['X-Pagination-Page-Count']
+            for page in range(1, int(total_pages) + 1):
+                users = requests.get(projects_url, verify=False, headers=headers, params={'page': page}).json()
+                for user in users:
+                    name = user["name"]
+                    people_id = user["people_id"]
+                    role = user["job_title"]
+                    hourly_rate = user["default_hourly_rate"]
+                    user_hashmap.update({name: {"id": people_id, "role": role, "default_hourly_rate": hourly_rate}})
+            return user_hashmap
+        except Exception as e:
+            print(f'Error while getting users. Error was {e}')
+
+    def create_tasks_from_ghseet(self, gsheet_data, scheduled=False):
+        """
+        Create Float task
+        :return: none
+        """
+        task_type = 'tasks' if scheduled else 'logged-time'
+        tasks_url = f"{self.float_api}/{task_type}"
+        headers = {
+            "User-Agent": "Python Float App",
+            "Authorization": f"Bearer {self.float_token}"
+        }
+        try:
+            print(f'Creating Float {task_type} Tasks')
+            count = 0
+            for row in gsheet_data:
+                # if row[1][:4] == '2021':
+                body = {
+                    "project_id": self.get_project_id(row[6].upper(), row[7]),
+                    "people_id": self.float_users[unidecode.unidecode(row[2])]['id'],
+                    "hours": round(float(row[11]) * 4) / 4 if float(row[11]) >= 0.25 else 0.25,
+                    "date": row[1],
+                    "billable": 1 if row[9].strip().upper() == 'TRUE' else 0,
+                    "task_name": row[8]
+                }
+                response = requests.post(tasks_url, verify=False, headers=headers, data=body)
+                print(row[9], body["billable"], response.json()[0]["billable"])
+                if 'X-RateLimit-Remaining-Minute' in response.headers:
+                    rate_limit_remaining = response.headers['X-RateLimit-Remaining-Minute']
+                    if int(rate_limit_remaining) <= 15:
+                        print("Cooling down 1:30 minutes")
+                        sleep(90)
+                    else:
+                        sleep(0.8)  # 800ms pause to avoid API Throttle
+                count += 1
+                if response.status_code == 200:
+                    print(count, response.status_code, response.json())
+                else:
+                    print(count, response.status_code, row)
+
+            print(f" {count} Tasks were successfully created")
+        except Exception as e:
+            print(f'Error while creating tasks. Error was {e}')
+
+    def get_project_id(self, name, code):
+        """
+        Get Float project id, based on project name and code
+        """
+        for project_id, project_data in self.float_projects.items():
+            if code and project_data["code"]:
+                if project_data["name"].upper() == name.upper() and project_data["code"].upper() == code.upper():
+                    return project_id
+            elif project_data["name"].upper() == name.upper():
+                return project_id
+
+    def get_harvest_project_data(self, name, code):
+        """
+        Get project data for a given project name and code
+        """
+        for project_id, project_data in self.harvest_projects.items():
+            data = {"client": project_data["client"],
+                    "is_billable": project_data["is_billable"],
+                    "is_active": project_data["is_active"],
+                    "id": project_id,
+                    "name": project_data["name"]}
+            if project_data["name"].upper() == name.upper() and project_data["code"].upper() == code.upper():
+                return data
+        return
+
+    def sync_projects(self):
+        """
+        Sync Float projects from Harvest's projects
+        :return: none
+        """
+        try:
+            print('Syncing Float Projects')
+            for id, project_data in self.float_projects.items():
+                harvest_data = self.get_harvest_project_data(project_data["name"], project_data["code"])
+                if harvest_data:
+                    is_billable = 0 if harvest_data["is_billable"] else 1
+                    is_active = 1 if harvest_data["is_active"] else 0
+                    client = harvest_data["client"]
+                    body = {}
+                    if project_data["client"] != self.float_clients[client]["id"]:
+                        body["client_id"] = self.float_clients[client]["id"]
+                    if project_data["is_billable"] != is_billable:
+                        body["non_billable"] = is_billable
+                    if project_data["is_active"] != is_active:
+                        body["active"] = is_active
+                    if body:
+                        sleep(0.4)
+                        self.update_data('projects', id, body)
+                else:
+                    print('Float project data not found in Harvest', id, project_data)
+            print('Projects finished syncing')
+        except Exception as e:
+            print(f'Error while syncing projects. Error was {e}')
+
+    def sync_people(self):
+        """
+        Sync Float Users from Harvest
+        :return: none
+        """
+        try:
+            print('Syncing Float Users')
+            for user, user_data in self.float_users.items():
+                if user not in self.harvest_users.keys():
+                    continue
+                float_rate = float(user_data["default_hourly_rate"]) if user_data["default_hourly_rate"] else float(0)
+                float_role = user_data["role"] if user_data["role"] else ""
+                if self.harvest_users[user]["default_hourly_rate"]:
+                    harvest_rate = self.harvest_users[user]["default_hourly_rate"]
+                else:
+                    harvest_rate = float(0)
+                harvest_role = self.harvest_users[user]["role"]
+                body = {}
+                if float_rate != harvest_rate:
+                    body["default_hourly_rate"] = harvest_rate
+                if float_role != harvest_role:
+                    body["job_title"] = harvest_role
+                if body:
+                    self.update_data('people', user_data["id"], body)
+        except Exception as e:
+            print(f'Error while syncing Users. Error was {e}')
+
+    def update_data(self, endpoint, id, body):
+        """
+        Update via PATCH method a Float field on specified endpoint
+        """
+        url = f"{self.float_api}/{endpoint}/{id}"
+        headers = {
+            "User-Agent": "Python Float App",
+            "Authorization": f"Bearer {self.float_token}"
+        }
+        try:
+            response = requests.patch(url, verify=False, headers=headers, data=body).json()
+            print(f'Updated {endpoint}/{id}. Input: {body}. Response: {response}')
+        except Exception as e:
+            print(f'Error while updating {endpoint}/{id}: {e}')
 
 
-def gsheet_append(credentials_file, spreadsheet_id, gsheet_range, values):
+class GoogleRunner:
     """
-    Append rows to Google Sheet
-    :param spreadsheet_id:
-    :param gsheet_range:
-    :param credentials_file:
-    :param values:
-    :return:
+    A class to manage Google Sheets
     """
-    try:
-        if values:
-            service = google_auth(credentials_file)
-            print(f'Updating {gsheet_range} Google Sheet')
-            body = {
-                'values': values
-            }
-            result = service.spreadsheets().values().append(spreadsheetId=spreadsheet_id, range=gsheet_range,
-                                                            insertDataOption="INSERT_ROWS",
-                                                            valueInputOption="RAW", body=body).execute()
-            updated_data = result.get('updates').get('updatedCells')
-            print('{0} cells appended.'.format(updated_data))
-            return updated_data
-        else:
-            print('Current entries are up to date')
-            return None
-    except Exception as e:
-        print(f'Error while updating Gsheet {spreadsheet_id}. Error was: {e}')
 
+    def __init__(self, spreadsheet_id, credentials_file, entries_sheet, logs_sheet, roles_sheet,
+                 weekly_tasks_sheet, projects_sheet):
+        self.spreadsheet_id = spreadsheet_id
+        self.credentials_file = credentials_file
+        self.entries_sheet = entries_sheet
+        self.logs_sheet = logs_sheet
+        self.roles_sheet = roles_sheet
+        self.weekly_tasks_sheet = weekly_tasks_sheet
+        self.projects_sheet = projects_sheet
 
-def gsheet_update(credentials_file, spreadsheet_id, gsheet_range, values):
-    """
-    Update row range on Google Sheet
-    :param spreadsheet_id:
-    :param values:
-    :param credentials_file:
-    :param gsheet_range:
-    :return:
-    """
-    try:
-        if values:
-            service = google_auth(credentials_file)
-            print(f'Updating {gsheet_range} Google Sheet')
-            body = {
-                'values': values
-            }
-            result = service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=gsheet_range,
-                                                            valueInputOption="RAW", body=body).execute()
-            updated_data = result.get('updatedCells')
-            print(f'{updated_data} cells on Row {gsheet_range} were updated.')
-            return updated_data
-        else:
-            print('There is nothing to be updated')
-            return None
-    except Exception as e:
-        print(f'Error while updating Gsheet Row {gsheet_range}. Error was: {e}')
+    def google_auth(self):
+        """
+        oauth2 authentication agains Google Gsheet API
+        :return:
+        """
+        scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        try:
+            credentials = ServiceAccountCredentials.from_json_keyfile_name(self.credentials_file, scope)
+            service = build('sheets', 'v4', http=credentials.authorize(httplib2.Http()), cache_discovery=False)
+            return service
+        except Exception as e:
+            print(f"Error connecting: {e}. Retrying connection...")
+            credentials = ServiceAccountCredentials.from_json_keyfile_name(self.credentials_file, scope)
+            service = build('sheets', 'v4', http=credentials.authorize(httplib2.Http()), cache_discovery=False)
+            return service
 
+    def gsheet_append(self, gsheet_range, values):
+        """
+        Append rows to Google Sheet
+        :param ghseet_range:
+        :param values:
+        :return:
+        """
+        try:
+            if values:
+                service = self.google_auth()
+                print(f'Updating {gsheet_range} Google Sheet')
+                body = {
+                    'values': values
+                }
+                result = service.spreadsheets().values().append(spreadsheetId=self.spreadsheet_id, range=gsheet_range,
+                                                                insertDataOption="INSERT_ROWS",
+                                                                valueInputOption="RAW", body=body).execute()
+                updated_data = result.get('updates').get('updatedCells')
+                print('{0} cells appended.'.format(updated_data))
+                return updated_data
+            else:
+                print('Current entries are up to date')
+                return None
+        except Exception as e:
+            print(f'Error while updating Gsheet {self.spreadsheet_id}. Error was: {e}')
 
-def read_gsheet_data(credentials_file, spreadsheet_id, sheet_range):
-    """
-    Append rows to Google Sheet
-    :param spreadsheet_id:
-    :param sheet_range:
-    :param credentials_file:
-    :return: all rows if exists
-    """
-    try:
-        service = google_auth(credentials_file)
-        sheet = service.spreadsheets()
-        result = sheet.values().get(spreadsheetId=spreadsheet_id,
-                                    range=sheet_range).execute()
-        values = result.get('values', [])
-        if not values:
-            print('No data found.')
-            return None
-        else:
-            return values
-    except Exception as e:
-        print(f'Error while reading Gsheet data from {spreadsheet_id}. Error was: {e}')
+    def gsheet_update(self, gsheet_range, values):
+        """
+        Update row range on Google Sheet
+        :param values:
+        :param gsheet_range:
+        :return:
+        """
+        try:
+            if values:
+                service = self.google_auth()
+                print(f'Updating {gsheet_range} Google Sheet')
+                body = {
+                    'values': values
+                }
+                result = service.spreadsheets().values().update(spreadsheetId=self.spreadsheet_id, range=gsheet_range,
+                                                                valueInputOption="RAW", body=body).execute()
+                updated_data = result.get('updatedCells')
+                print(f'{updated_data} cells on Row {gsheet_range} were updated.')
+                return updated_data
+            else:
+                print('There is nothing to be updated')
+                return None
+        except Exception as e:
+            print(f'Error while updating Gsheet Row {gsheet_range}. Error was: {e}')
 
+    def read_gsheet_data(self, sheet_range):
+        """
+        Append rows to Google Sheet
+        :param sheet_range:
+        :return: all rows if exists
+        """
+        try:
+            print(f'Getting data from {sheet_range}')
+            service = self.google_auth()
+            sheet = service.spreadsheets()
+            result = sheet.values().get(spreadsheetId=self.spreadsheet_id,
+                                        range=sheet_range).execute()
+            values = result.get('values', [])
+            if not values:
+                print('No data found.')
+                return None
+            else:
+                return values
+        except Exception as e:
+            print(f'Error while reading Gsheet data from {self.spreadsheet_id}. Error was: {e}')
 
-def get_missing_rows(input_entries, past_entries_lookup):
-    """
-    Get missing rows in Gsheet, based on a list of rows input
-    :param input_entries: potential new rows from previous fortnight
-    :param past_entries_lookup: days to compare in the past
-    :return: missing rows
-    """
-    print('Getting Missing Rows from Google Sheet')
-    current_rows = read_gsheet_data(CREDENTIALS_FILE, SPREADSHEET_ID, ENTRIES_SHEET)
-    last_period_initial_date = (datetime.today() - timedelta(days=past_entries_lookup)).strftime('%Y-%m-%d')
-    last_period_rows_uid = [int(row[0]) for row in current_rows[1:] if row[1] >= last_period_initial_date]
-    new_rows = [row for row in input_entries if row[0] not in last_period_rows_uid]
-    return new_rows
+    def get_missing_rows(self, input_entries, past_entries_lookup):
+        """
+        Get missing rows in Gsheet, based on a list of rows input
+        :param input_entries: potential new rows from previous fortnight
+        :param past_entries_lookup: days to compare in the past
+        :return: missing rows
+        """
+        print('Getting Missing Rows from Google Sheet')
+        current_rows = self.read_gsheet_data(self.entries_sheet)
+        last_period_initial_date = (datetime.today() - timedelta(days=past_entries_lookup)).strftime('%Y-%m-%d')
+        last_period_rows_uid = [int(row[0]) for row in current_rows[1:] if row[1] >= last_period_initial_date]
+        new_rows = [row for row in input_entries if row[0] not in last_period_rows_uid]
+        return new_rows
 
+    def get_weekly_entries(self):
+        """
+        Get weekly automated Harvest tasks
+        :return:
+        """
+        print('Getting Automated time-entries from Google Sheet')
+        weekly_entries = self.read_gsheet_data(self.weekly_tasks_sheet)
+        entries = [{"user": row[0], "project": row[1], "code": row[2], "task": row[3], "date": row[4],
+                    "hours": row[5]} for row in weekly_entries[1:]]
+        return entries
 
-def get_weekly_entries():
-    """
-    Get weekly automated Harvest tasks
-    :return:
-    """
-    print(f'Getting Automated time-entries from {WEEKLY_TASKS_SHEET} Google Sheet')
-    weekly_entries = read_gsheet_data(CREDENTIALS_FILE, SPREADSHEET_ID, WEEKLY_TASKS_SHEET)
-    entries = [{"user": row[0], "project": row[1], "code": row[2], "task": row[3], "date": row[4],
-                "hours": row[5]} for row in weekly_entries[1:]]
-    return entries
+    def get_eligible_roles(self):
+        """
+        Get roles and their target utilization
+        :return: dict: {'role_a': 0.15}
+        """
+        print(f'Getting AirTable Roles from {self.roles_sheet} Google Sheet')
+        eligible_roles_rows = self.read_gsheet_data(self.roles_sheet)
+        eligible_roles = {}
+        for row in eligible_roles_rows[1:]:
+            if '%' in row[1]:
+                eligible_roles.update({row[0]: float('0.' + row[1].strip('%'))})
+            else:
+                eligible_roles.update({row[0]: float(row[1])})
+        return eligible_roles
 
-
-def get_eligible_roles():
-    """
-    Get roles and their target utilization
-    :return: dict: {'role_a': 0.15}
-    """
-    print(f'Getting AirTable Roles from {ROLES_SHEET} Google Sheet')
-    eligible_roles_rows = read_gsheet_data(CREDENTIALS_FILE, SPREADSHEET_ID, ROLES_SHEET)
-    eligible_roles = {}
-    for row in eligible_roles_rows[1:]:
-        if '%' in row[1]:
-            eligible_roles.update({row[0]: float('0.' + row[1].strip('%'))})
-        else:
-            eligible_roles.update({row[0]: float(row[1])})
-    return eligible_roles
-
-
-def log_update(payload, sheet_id, type="entries"):
-    """
-    Log updated rows on Gsheet
-    :param payload:
-    :param sheet_id:
-    :param type: gsheet column length identifier
-    :return: None
-    """
-    sheet_type = {
-        "projects": 12,
-        "entries": 15
-    }
-    length = sheet_type[type]
-    log_date = date.today()
-    rows = int(payload) // length
-    update_msg = f'Logging info for {log_date}: {rows} rows were appended on {sheet_id}'
-    gsheet_append(CREDENTIALS_FILE, SPREADSHEET_ID, LOGS_SHEET, [[update_msg]])
+    def log_update(self, payload, sheet_id, type="entries"):
+        """
+        Log updated rows on Gsheet
+        :param payload:
+        :param sheet_id:
+        :param type: gsheet column length identifier
+        :return: None
+        """
+        sheet_type = {
+            "projects": 12,
+            "entries": 15
+        }
+        length = sheet_type[type]
+        log_date = date.today()
+        rows = int(payload) // length
+        update_msg = f'Logging info for {log_date}: {rows} rows were appended on {sheet_id}'
+        self.gsheet_append(self.logs_sheet, [[update_msg]])
 
 
 def runner(event, context):
     logging.info(f'Starting Cloud function Runner. {event}: {context}')
-    harvest_runner = HarvestAnalytics(PAST_ENTRIES_LOOKUP, HARVEST_ACCOUNT_ID, HARVEST_TOKEN)
-    harvest_runner.create_weekly_entries()
+    google_runner = GoogleRunner(SPREADSHEET_ID, CREDENTIALS_FILE, ENTRIES_SHEET, LOGS_SHEET,
+                                 ROLES_SHEET, WEEKLY_TASKS_SHEET, PROJECTS_SHEET)
+    weekly_entries = google_runner.get_weekly_entries()
+    eligible_roles = google_runner.get_eligible_roles()
+    harvest_runner = HarvestAnalytics(PAST_ENTRIES_LOOKUP, HARVEST_ACCOUNT_ID, HARVEST_TOKEN,
+                                      weekly_entries, eligible_roles)
     harvest_entries = harvest_runner.get_historical_data()
-    new_rows = get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
-    updated_cells = gsheet_append(CREDENTIALS_FILE, SPREADSHEET_ID, ENTRIES_SHEET, new_rows)
-    log_update(updated_cells, ENTRIES_SHEET, "entries")
+    new_rows = google_runner.get_missing_rows(harvest_entries, PAST_ENTRIES_LOOKUP)
+    updated_cells = google_runner.gsheet_append(ENTRIES_SHEET, new_rows)
+    google_runner.log_update(updated_cells, ENTRIES_SHEET)
     projects_status = harvest_runner.get_project_rows()
     projects_range = f'{PROJECTS_SHEET}!A2:M'
-    updated_cells = gsheet_update(CREDENTIALS_FILE, SPREADSHEET_ID, projects_range, projects_status)
-    log_update(updated_cells, PROJECTS_SHEET, "projects")
+    updated_cells = google_runner.gsheet_update(projects_range, projects_status)
+    google_runner.log_update(updated_cells, PROJECTS_SHEET, "projects")
+    harvest_users = harvest_runner.harvest_users
+    harvest_projects = harvest_runner.harvest_projects
+    float_runner = FloatAnalytics(FLOAT_TOKEN, users=harvest_users, projects=harvest_projects)
+    float_runner.sync_people()
+    float_runner.sync_projects()
+    # float_runner.create_tasks_from_ghseet(new_rows)
 
 
 def wrapper(event, context):

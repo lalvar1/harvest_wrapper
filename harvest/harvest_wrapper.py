@@ -1,6 +1,6 @@
 import requests
-from datetime import datetime, timedelta, date
-from time import sleep
+from datetime import datetime, timedelta
+import logging
 
 
 class HarvestAnalytics:

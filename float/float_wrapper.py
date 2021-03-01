@@ -7,7 +7,6 @@ class FloatAnalytics:
     """
     A class to process and structure Float data
     """
-
     def __init__(self, float_token, users=None, projects=None, clients=None, tasks=None):
         self.float_token = float_token
         self.float_api = 'https://api.float.com/v3'
@@ -324,7 +323,7 @@ class FloatAnalytics:
             print(f'Error while syncing Users. Error was {e}')
 
     def update_data(self, endpoint, id, body):
-        f"""
+        """
         Update via PATCH method a Float field on specified endpoint
         """
         url = f"{self.float_api}/{endpoint}/{id}"
