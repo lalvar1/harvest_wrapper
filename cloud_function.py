@@ -7,6 +7,7 @@ import urllib3
 from datetime import datetime, timedelta, date
 import os
 import unidecode
+from time import sleep
 
 
 logging.info('Loading ENV vars')
@@ -436,8 +437,8 @@ class FloatAnalytics:
                     if int(rate_limit_remaining) <= 15:
                         print("Cooling down 1:30 minutes")
                         sleep(90)
-                    else:
-                        sleep(0.8)  # 800ms pause to avoid API Throttle
+                else:
+                    sleep(0.65)  # 650ms pause to avoid API Throttle
                 count += 1
                 if response.status_code == 200:
                     print(count, response.status_code, response.json())
@@ -498,7 +499,6 @@ class FloatAnalytics:
                         self.update_data('projects', id, body)
                 else:
                     print('Float project data not found in Harvest', id, project_data)
-            print('Projects finished syncing')
         except Exception as e:
             print(f'Error while syncing projects. Error was {e}')
 
@@ -728,7 +728,7 @@ def runner(event, context):
     float_runner = FloatAnalytics(FLOAT_TOKEN, users=harvest_users, projects=harvest_projects)
     float_runner.sync_people()
     float_runner.sync_projects()
-    # float_runner.create_tasks_from_ghseet(new_rows)
+    float_runner.create_tasks_from_ghseet(new_rows)
 
 
 def wrapper(event, context):

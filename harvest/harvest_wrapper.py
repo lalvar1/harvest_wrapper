@@ -218,7 +218,8 @@ class HarvestAnalytics:
                 for task in tasks["tasks"]:
                     name = task["name"].upper()
                     task_id = task["id"]
-                    tasks_hashmap.update({name: task_id})
+                    billable = task["billable_by_default"]
+                    tasks_hashmap.update({name: {"id": task_id, "billable": billable}})
             return tasks_hashmap
         except Exception as e:
             print(f'Error while getting tasks. Error was {e}')

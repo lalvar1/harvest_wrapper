@@ -217,8 +217,8 @@ class FloatAnalytics:
                     if int(rate_limit_remaining) <= 15:
                         print("Cooling down 1:30 minutes")
                         sleep(90)
-                    else:
-                        sleep(0.8)  # 800ms pause to avoid API Throttle
+                else:
+                    sleep(0.65)  # 650ms pause to avoid API Throttle
                 count += 1
                 if response.status_code == 200:
                     print(count, response.status_code, response.json())
@@ -290,7 +290,6 @@ class FloatAnalytics:
                         self.update_data('projects', id, body)
                 else:
                     print('Float project data not found in Harvest', id, project_data)
-            print('Projects finished syncing')
         except Exception as e:
             print(f'Error while syncing projects. Error was {e}')
 

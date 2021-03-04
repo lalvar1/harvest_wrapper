@@ -46,13 +46,14 @@ def main(event, context):
     # projects_range = f'{PROJECTS_SHEET}!A2:M'
     # updated_cells = google_runner.gsheet_update(projects_range, projects_status)
     # google_runner.log_update(updated_cells, PROJECTS_SHEET, "projects")
-    # new_rows = google_runner.read_gsheet_data(ENTRIES_SHEET)
     harvest_users = harvest_runner.harvest_users
     harvest_projects = harvest_runner.harvest_projects
     float_runner = FloatAnalytics(FLOAT_TOKEN, users=harvest_users, projects=harvest_projects)
     float_runner.sync_people()
     float_runner.sync_projects()
-    float_runner.create_tasks_from_ghseet(new_rows)
+    # float_runner.create_tasks_from_ghseet(new_rows)
+    new_rows = google_runner.read_gsheet_data(ENTRIES_SHEET)
+    float_runner.create_tasks_from_ghseet(new_rows[53331:])
     # forecast_runner = ForecastAnalytics(FORECAST_ACCOUNT_ID, FORECAST_TOKEN)
     # forecast_assignments = forecast_runner.get_forecast_assignments()
     # updated_cells = google_runner.gsheet_append(FORECAST_SHEET, forecast_assignments)
