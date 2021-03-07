@@ -131,7 +131,9 @@ class FloatAnalytics:
                     people_id = user["people_id"]
                     role = user["job_title"]
                     hourly_rate = user["default_hourly_rate"]
-                    user_hashmap.update({name: {"id": people_id, "role": role, "default_hourly_rate": hourly_rate}})
+                    active = True if user["active"] == 1 else False
+                    user_hashmap.update({name: {"id": people_id, "role": role, "default_hourly_rate": hourly_rate,
+                                                "active": active}})
             return user_hashmap
         except Exception as e:
             print(f'Error while getting users. Error was {e}')
@@ -305,16 +307,20 @@ class FloatAnalytics:
                     continue
                 float_rate = float(user_data["default_hourly_rate"]) if user_data["default_hourly_rate"] else float(0)
                 float_role = user_data["role"] if user_data["role"] else ""
+                float_status = user_data["active"]
                 if self.harvest_users[user]["default_hourly_rate"]:
                     harvest_rate = self.harvest_users[user]["default_hourly_rate"]
                 else:
                     harvest_rate = float(0)
                 harvest_role = self.harvest_users[user]["role"]
+                harvest_status = self.harvest_users[user]["active"]
                 body = {}
                 if float_rate != harvest_rate:
                     body["default_hourly_rate"] = harvest_rate
                 if float_role != harvest_role:
                     body["job_title"] = harvest_role
+                if float_status != harvest_status:
+                    body["active"] = harvest_status
                 if body:
                     # print(user, rate, self.harvest_users[user])
                     self.update_data('people', user_data["id"], body)

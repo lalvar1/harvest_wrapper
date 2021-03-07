@@ -65,7 +65,9 @@ class HarvestAnalytics:
                     timezone = None
                 user_id = user['id']
                 hourly_rate = user['default_hourly_rate']
-                user_info = {'role': role, 'geography': timezone, 'id': user_id, 'default_hourly_rate': hourly_rate}
+                active = user['is_active']
+                user_info = {'role': role, 'geography': timezone, 'id': user_id, 'default_hourly_rate': hourly_rate,
+                             'active': active}
                 users_data.update({full_name: user_info})
             return users_data
         except Exception as e:
