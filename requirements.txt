@@ -5,3 +5,4 @@ oauth2client==4.1.3
 httplib2==0.18.1
 python-dotenv==0.15.0
 pyforecast==0.1.4
+Unidecode==1.2.0

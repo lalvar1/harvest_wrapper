@@ -435,13 +435,14 @@ class FloatAnalytics:
                 }
                 response = requests.post(tasks_url, verify=False, headers=headers, data=body)
                 count += 1
+                print(count, response.status_code, response.json())
                 if 'X-RateLimit-Remaining-Minute' in response.headers:
                     rate_limit_remaining = response.headers['X-RateLimit-Remaining-Minute']
                     if int(rate_limit_remaining) <= 15:
-                        print("Cooling down 1:30 minutes")
-                        sleep(90)
+                        print("Cooling down 30 secs")
+                        sleep(30)
                 else:
-                    sleep(0.65)  # 650ms pause to avoid API Throttle
+                    sleep(0.4)  # 400ms pause to avoid API Throttle
             print(f" {count} {task_type} Tasks were successfully created")
         except Exception as e:
             print(f'Error while creating tasks. Error was {e}')
@@ -492,7 +493,6 @@ class FloatAnalytics:
                     if project_data["is_active"] != is_active:
                         body["active"] = is_active
                     if body:
-                        sleep(0.4)
                         self.update_data('projects', id, body)
                 else:
                     print('Float project data not found in Harvest', id, project_data)
